@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sales Rotation Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f4f7fa; margin:0; padding:20px; color:#333; }
+    .container { max-width: 980px; margin:auto; display:flex; gap:20px; flex-wrap:wrap; }
+    .people-list, .rotation-queue { background:#fff; padding:20px; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+    .people-list { flex: 1 1 300px; }
+    .rotation-queue { flex: 2 1 520px; }
+    h1, h2 { color:#2c3e50; margin:0 0 12px; }
+    ul { list-style:none; padding:0; margin:0; }
+    li { padding:12px; margin:6px 0; border-radius:10px; background:#f9fbfd; }
+    li.tappable { cursor:pointer; transition:background .15s; }
+    li.tappable:active, li.tappable:hover { background:#e9f6ff; }
+    .person { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .status { padding:6px 10px; border-radius:999px; color:#fff; font-size:.8rem; margin-left:8px; }
+    .active { background:#27ae60; }
+    .lunch { background:#f39c12; }
+    .bb    { background:#e67e22; }
+    button { background:#3498db; color:#fff; border:none; padding:10px 12px; border-radius:10px; cursor:pointer; font-size:.95rem; }
+    button:hover { background:#2980b9; }
+    button:active { transform: scale(.98); }
+    input[type="text"] { width:100%; padding:10px 12px; border:1px solid #d9e1ea; border-radius:10px; margin:6px 0 10px; font-size:1rem; }
+    #add-person { width:100%; }
+    #settings { margin-top:14px; }
+    .handle { font-weight:700; user-select:none; margin-right:8px; }
+    /* make tap targets comfortable on iPhone */
+    .btn-row button { padding:10px 12px; margin-left:6px; }
+    @media (max-width: 720px){
+      body{ padding:14px; }
+      .person{ flex-wrap:wrap; }
+      .btn-row{ width:100%; display:flex; gap:8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="people-list">
+      <h2>All Team Members</h2>
+      <ul id="people-list"></ul>
+      <input type="text" id="new-person" placeholder="Add new person...">
+      <button id="add-person">Add</button>
+      <div id="settings">
+        <h3>Schedule Order (comma-separated)</h3>
+        <input type="text" id="schedule-order" placeholder="e.g., Alice,Bob,Charlie,David">
+        <button id="save-schedule">Save</button>
+      </div>
+    </div>
+
+    <div class="rotation-queue">
+      <h1>Up Board: Rotation Queue</h1>
+      <ul id="queue-list"></ul>
+      <button id="reset-queue">Reset Rotation</button>
+    </div>
+  </div>
+
+  <!-- SortableJS for touch-friendly drag on iPhone -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  <script>
+    // --- Data ---
+    let people   = ['Alice','Bob','Charlie','David'];
+    let queue    = [];
+    let schedule = ['Alice','Bob','Charlie','David'];
+
+    // Load/save
+    function loadData(){
+      try{
+        if(localStorage.getItem('people'))   people   = JSON.parse(localStorage.getItem('people'));
+        if(localStorage.getItem('queue'))    queue    = JSON.parse(localStorage.getItem('queue'));
+        if(localStorage.getItem('schedule')) schedule = JSON.parse(localStorage.getItem('schedule'));
+      }catch(e){}
+      renderPeople(); renderQueue();
+    }
+    function saveData(){
+      localStorage.setItem('people', JSON.stringify(people));
+      localStorage.setItem('queue', JSON.stringify(queue));
+      localStorage.setItem('schedule', JSON.stringify(schedule));
+    }
+
+    // --- UI builders ---
+    function renderPeople(){
+      const list = document.getElementById('people-list');
+      list.innerHTML = '';
+      people.forEach(p=>{
+        const li = document.createElement('li');
+        li.className = 'tappable';
+        li.innerHTML = `<span class="handle">＋</span>${p}`;
+        li.addEventListener('click', ()=>addToQueue(p));
+        list.appendChild(li);
+      });
+    }
+
+    function renderQueue(){
+      const list = document.getElementById('queue-list');
+      list.innerHTML = '';
+      queue.forEach((item, index)=>{
+        const li = document.createElement('li');
+        li.className = 'person';
+        li.innerHTML = `
+          <div><span class="handle">≡</span>${item.name}
+            <span class="status ${item.status.toLowerCase()}">${item.status}</span>
+          </div>
+          <div class="btn-row">
+            <button onclick="toggleStatus(${index}, 'Lunch')">Lunch</button>
+            <button onclick="toggleStatus(${index}, 'BB')">BB</button>
+            <button onclick="removeFromQueue(${index})">Remove</button>
+          </div>
+        `;
+        list.appendChild(li);
+      });
+    }
+
+    // --- Actions ---
+    function addToQueue(name){
+      if(queue.find(q=>q.name===name)) return;
+      const pos = schedule.indexOf(name);
+      queue.splice(pos !== -1 ? pos : queue.length, 0, { name, status:'Active' });
+      saveData(); renderQueue();
+    }
+
+    function toggleStatus(index, newStatus){
+      const current = queue[index];
+      if(!current) return;
+      if(newStatus === current.status){
+        current.status = 'Active';
+      }else{
+        current.status = newStatus;
+        if(newStatus === 'Lunch'){
+          queue.splice(index, 1); // temporarily off the board
+        }
+      }
+      saveData(); renderQueue();
+    }
+
+    function removeFromQueue(index){
+      queue.splice(index,1);
+      saveData(); renderQueue();
+    }
+
+    function addPerson(){
+      const input = document.getElementById('new-person');
+      const name = input.value.trim();
+      if(name && !people.includes(name)){
+        people.push(name);
+        schedule.push(name);
+        saveData(); renderPeople();
+      }
+      input.value = '';
+    }
+
+    function saveSchedule(){
+      const input = document.getElementById('schedule-order');
+      if(input.value.trim()){
+        schedule = input.value.split(',').map(s=>s.trim()).filter(Boolean);
+        saveData();
+        queue.sort((a,b)=>schedule.indexOf(a.name)-schedule.indexOf(b.name));
+        renderQueue();
+      }
+    }
+
+    function resetQueue(){
+      queue = []; saveData(); renderQueue();
+    }
+
+    // --- Sortable (mobile drag & drop) ---
+    function enableSorting(){
+      new Sortable(document.getElementById('queue-list'), {
+        handle: '.handle',
+        animation: 150,
+        onEnd: function(evt){
+          const moved = queue.splice(evt.oldIndex,1)[0];
+          queue.splice(evt.newIndex,0,moved);
+          saveData(); renderQueue();
+        }
+      });
+    }
+
+    // --- Wire up and init ---
+    document.getElementById('add-person').addEventListener('click', addPerson);
+    document.getElementById('save-schedule').addEventListener('click', saveSchedule);
+    document.getElementById('reset-queue').addEventListener('click', resetQueue);
+
+    loadData();
+    enableSorting();
+  </script>
+</body>
+</html>
